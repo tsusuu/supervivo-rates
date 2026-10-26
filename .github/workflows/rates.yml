@@ -2,8 +2,8 @@ name: rates
 
 on:
   schedule:
-    # 12:00 KST (월~금), 하루 한 번
-    - cron: "0 3 * * 1-5"
+    # 12:10 KST (월~금), 하루 한 번. 카드사는 매입일 첫 고시 환율 하나만 쓰므로 하루 1회면 충분
+    - cron: "10 3 * * 1-5"
   workflow_dispatch:
 
 permissions:
