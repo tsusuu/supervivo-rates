@@ -4,6 +4,7 @@
 - 키가 없으면 아무것도 바꾸지 않고 끝낸다(실패로 보지 않는다).
 - 비영업일·오전 11시 전이라 빈 응답이면 이전 파일을 그대로 둔다.
 - history/에는 최근 60일 치를 남긴다(카드사 전표 접수일 환율을 찾을 때 쓴다).
+- rates.json의 date는 환율 고시일, checkedAt은 마지막으로 확인한 때(새 환율이 없어도 매번 남김)다.
 """
 import datetime
 import json
@@ -47,7 +48,7 @@ def parse(items, day):
     return {
         "source": "한국수출입은행 현재환율(AP01)",
         "date": day.isoformat(),
-        "fetchedAt": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "fetchedAt": now_utc(),
         "rates": dict(sorted(rates.items())),
     }
 
@@ -66,6 +67,20 @@ def prune_history(today):
             continue
 
 
+def now_utc():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def mark_checked():
+    """새 환율이 없어도(휴일·갱신 전·오류) 확인한 때(checkedAt)만 남긴다. 앱은 이것으로 '확인은 했는데 휴일'과 '확인이 멈춤'을 가린다"""
+    path = ROOT / "rates.json"
+    if not path.exists():
+        return
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["checkedAt"] = now_utc()
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+
+
 def main():
     key = os.environ.get("KEXIM_AUTHKEY", "").strip()
     if not key:
@@ -76,15 +91,18 @@ def main():
         items = fetch(key, day)
     except Exception as error:  # 네트워크 오류: 이전 파일 유지
         print(f"받지 못함({type(error).__name__}), 이전 파일 유지")
+        mark_checked()
         return 0
     if not isinstance(items, list) or not items:
         print("빈 응답(비영업일 또는 갱신 전), 이전 파일 유지")
+        mark_checked()
         return 0
     data = parse(items, day)
     if not data["rates"]:
         print("쓸 수 있는 환율이 없어 이전 파일 유지")
+        mark_checked()
         return 0
-    text = json.dumps(data, ensure_ascii=False, indent=1) + "\n"
+    text = json.dumps({**data, "checkedAt": now_utc()}, ensure_ascii=False, indent=1) + "\n"
     (ROOT / "rates.json").write_text(text, encoding="utf-8")
     (ROOT / "history").mkdir(exist_ok=True)
     (ROOT / "history" / f"{day.isoformat()}.json").write_text(text, encoding="utf-8")
