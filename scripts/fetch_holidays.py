@@ -10,7 +10,9 @@
 import datetime
 import json
 import os
+import re
 import sys
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -21,7 +23,8 @@ ENDPOINT = "https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/get
 
 def fetch_month(key, year, month):
     # 키가 들어간 주소는 오류 메시지에도 남기지 않는다
-    query = urllib.parse.urlencode({"serviceKey": key, "solYear": year, "solMonth": f"{month:02d}", "_type": "json", "numOfRows": 50})
+    # 포털의 인코딩 키(%2B 등)를 넣어도 두 번 인코딩되지 않게 먼저 풀어 둔다
+    query = urllib.parse.urlencode({"serviceKey": urllib.parse.unquote(key), "solYear": year, "solMonth": f"{month:02d}", "_type": "json", "numOfRows": 50})
     request = urllib.request.Request(f"{ENDPOINT}?{query}", headers={"User-Agent": "supervivo-rates/1.0"})
     with urllib.request.urlopen(request, timeout=20) as response:
         body = json.loads(response.read())
@@ -61,7 +64,12 @@ def main():
             days = fetch_year(key, year)
         except Exception as error:
             # HTTP 상태 코드만 남긴다(주소·키는 남기지 않음)
-            print(f"{year} 받기 실패({type(error).__name__} {getattr(error, 'code', '')}) — 전에 받은 값 유지", file=sys.stderr)
+            reason = getattr(error, "code", "")
+            if isinstance(error, urllib.error.HTTPError):
+                # 포털 응답의 errMsg만 덧붙인다(응답에 키는 없다)
+                match = re.search(r"errMsg\W+([A-Z_]+)", error.read().decode("utf-8", "replace"))
+                reason = f"{error.code} {match.group(1)}" if match else error.code
+            print(f"{year} 받기 실패({type(error).__name__} {reason}) — 전에 받은 값 유지", file=sys.stderr)
             continue
         if not days:
             print(f"{year} 결과가 비어 전에 받은 값 유지", file=sys.stderr)
