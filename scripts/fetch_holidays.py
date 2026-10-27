@@ -60,7 +60,8 @@ def main():
         try:
             days = fetch_year(key, year)
         except Exception as error:
-            print(f"{year} 받기 실패({type(error).__name__}) — 전에 받은 값 유지", file=sys.stderr)
+            # HTTP 상태 코드만 남긴다(주소·키는 남기지 않음)
+            print(f"{year} 받기 실패({type(error).__name__} {getattr(error, 'code', '')}) — 전에 받은 값 유지", file=sys.stderr)
             continue
         if not days:
             print(f"{year} 결과가 비어 전에 받은 값 유지", file=sys.stderr)
